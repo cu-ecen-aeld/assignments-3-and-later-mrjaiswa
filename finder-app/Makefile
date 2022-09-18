@@ -4,7 +4,7 @@ CC = gcc
 BCC = aarch64-none-linux-gnu-gcc
 # Writer application
 writer:
-	$(CROSS_COMPILE)$(CC) -Wall -Werror writer.c -o writer
+	$(CROSS_COMPILE)$(CC) -Wall -Werror -fcommon writer.c -o writer
 
 # Writer .o files
 writer.o:
