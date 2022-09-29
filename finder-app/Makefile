@@ -3,6 +3,7 @@
 CC = gcc
 BCC = aarch64-none-linux-gnu-gcc
 # Writer application
+all: writer
 writer:
 	$(CROSS_COMPILE)$(CC) -Wall -Werror -fcommon writer.c -o writer
 
