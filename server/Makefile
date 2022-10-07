@@ -2,7 +2,7 @@ INCLUDE_DIRS =
 LIB_DIRS = 
 
 CC=$(CROSS_COMPILE)gcc
-CFLAGS = -g -Wall -Werror
+CFLAGS = -g 
 all:aesdsocket
 
 clean:

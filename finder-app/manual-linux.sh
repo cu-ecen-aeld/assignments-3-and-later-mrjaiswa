@@ -33,8 +33,8 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     cd linux-stable
     echo "Checking out version ${KERNEL_VERSION}"
     git checkout ${KERNEL_VERSION}
-    #wget https://github.com/torvalds/linux/commit/e33a814e772cdc36436c8c188d8c42d019fda639.diff
-    #git apply e33a814e772cdc36436c8c188d8c42d019fda639.diff
+    wget https://github.com/torvalds/linux/commit/e33a814e772cdc36436c8c188d8c42d019fda639.diff
+    git apply e33a814e772cdc36436c8c188d8c42d019fda639.diff
 
     # TODO: Add your kernel build steps here
     make ARCH=$ARCH CROSS_COMPILE=${CROSS_COMPILE} mrproper
