@@ -15,21 +15,16 @@
 #include <fcntl.h>
 #include <stdbool.h>
 
-#define PORT 9000 
+#define PORT 9000
 #define FILE "/var/tmp/aesdsocketdata"
-#define MAX_BUF_SIZE 1000
+#define MAX_BUFFER 1000
 #define BUFFER_SIZE 256
 #define CONCURRENT_CONN 10
 #define SEND_FLAGS 0
 #define RECV_FLAGS 0
 
-
-
-
 int file_fd, sock_fd;
 pid_t pid;
-
-
 
 void sig_handler(int signal) {
 
@@ -46,45 +41,45 @@ void sig_handler(int signal) {
 
 int main(int argc, char **argv)
 {
-    char *w_packet, *read_packet, server_buffer[MAX_BUF_SIZE];
-    struct sockaddr_in s, c;
+    char *w_packet, *read_packet, server_buffer[MAX_BUFFER];
+    struct sockaddr_in server_so, client_so;
     int status, recv_bytes, acceptfd, max_buf_size, saved_bytes, send_bytes = 0, read_bytes = 0;
     socklen_t addr_size;
-	
-	
-	
+
+
+
     sock_fd = socket(AF_INET , SOCK_STREAM, 0);
     if(sock_fd == -1)
-	{
-		syslog(LOG_ERR, "socket error = %d\n",errno);
-		
-		exit(-1);
-	}
-	else
-	{
-		syslog(LOG_DEBUG, "socket success\n");
-	}	
+        {
+                syslog(LOG_ERR, "socket error = %d\n",errno);
 
-	
-    s.sin_addr.s_addr = INADDR_ANY;
-    s.sin_family = AF_INET;
-    s.sin_port = htons(PORT);
-
-   	status = bind(sock_fd , (struct sockaddr_in *)&s , sizeof(struct sockaddr_in));
-
-	if(status == -1)
-	{
-		syslog(LOG_ERR, "bind error ");
-		fprintf(stderr, "bind error ");
-		exit(-1);
-	}
-	else
-	{
-		syslog(LOG_DEBUG, "bind success\n");
-	}
+                exit(-1);
+        }
+        else
+        {
+                syslog(LOG_DEBUG, "socket success\n");
+        }
 
 
- 
+    server_so.sin_addr.s_addr = INADDR_ANY;
+    server_so.sin_family = AF_INET;
+    server_so.sin_port = htons(PORT);
+
+        status = bind(sock_fd , (struct sockaddr_in *)&server_so , sizeof(struct sockaddr_in));
+
+        if(status == -1)
+        {
+                syslog(LOG_ERR, "bind error ");
+                fprintf(stderr, "bind error ");
+                exit(-1);
+        }
+        else
+        {
+                syslog(LOG_DEBUG, "bind success\n");
+        }
+
+
+
     if(argc > 1 && !strcmp(argv[1], "-d")){
                 pid_t pid = fork();
                 if(pid == -1) {
@@ -116,53 +111,53 @@ int main(int argc, char **argv)
                 }
 
 
-    	status = listen(sock_fd, CONCURRENT_CONN);
-	if(status == -1)
-	{
-		syslog(LOG_ERR, "listen error ");
-		
-		//exit(-1);
-	}
-	else
-	{
-		syslog(LOG_DEBUG, "listen success\n");
-	}
-	
-	
+        status = listen(sock_fd, CONCURRENT_CONN);
+        if(status == -1)
+        {
+                syslog(LOG_ERR, "Error in Listening");
+
+                //exit(-1);
+        }
+        else
+        {
+                syslog(LOG_DEBUG, "Successfully started Listening\n");
+        }
+
+
 
     file_fd = open(FILE, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
 
     while(1)
     {
-        addr_size = sizeof(c);
-        acceptfd = accept(sock_fd, (struct sockaddr_in *) &c, &addr_size);
-	if(acceptfd == -1)
-	{
-		syslog(LOG_ERR, "There has been an accept error ");
-		
-		exit(-1);
-	}
-	else
-	{
-		
-		syslog(LOG_DEBUG, "Accepted connection from : %s\n", inet_ntoa(c.sin_addr));
-	}
-	
-    max_buf_size = MAX_BUF_SIZE;
+        addr_size = sizeof(client_so);
+        acceptfd = accept(sock_fd, (struct sockaddr_in *) &client_so, &addr_size);
+        if(acceptfd == -1)
+        {
+                syslog(LOG_ERR, "There has been an accept error ");
+
+                exit(-1);
+        }
+        else
+        {
+
+                syslog(LOG_DEBUG, "Accepted connection from : %s\n", inet_ntoa(client_so.sin_addr));
+        }
+
+    max_buf_size = MAX_BUFFER;
     saved_bytes = 0;
 
 
-    w_packet = malloc(sizeof(char) * MAX_BUF_SIZE);
+    w_packet = malloc(sizeof(char) * MAX_BUFFER);
 
     bool packet_rx = false;
     while(!packet_rx)
     {
-        recv_bytes = recv(acceptfd, server_buffer, MAX_BUF_SIZE, RECV_FLAGS);
+        recv_bytes = recv(acceptfd, server_buffer, MAX_BUFFER, RECV_FLAGS);
 
         if (recv_bytes == 0 || (strchr(server_buffer, '\n') != NULL))
         {
             packet_rx = true;
-	    printf("Packet Completed\n");
+            printf("Packet Completed\n");
         }
 
         if ((max_buf_size - saved_bytes) < recv_bytes)
@@ -183,25 +178,25 @@ int main(int argc, char **argv)
 
     read_packet = (char*)malloc(sizeof(char) * send_bytes);
     if(read_packet == NULL)
-	{
-		syslog(LOG_ERR, "There has been an error in reading packet = %d\n",errno);
-		exit(-1);
-	}
+        {
+                syslog(LOG_ERR, "There has been an error in reading packet = %d\n",errno);
+                exit(-1);
+        }
 
     read_bytes = read(file_fd, read_packet, send_bytes);
 
     status = send(acceptfd, read_packet, read_bytes , SEND_FLAGS);
     if(status == -1)
-	{
-		syslog(LOG_ERR, "send error = %d\n",errno);
-		fprintf(stderr, "send error: %d\n", errno);
-		exit(-1);
-	}
+        {
+                syslog(LOG_ERR, "send error = %d\n",errno);
+                fprintf(stderr, "send error: %d\n", errno);
+                exit(-1);
+        }
     else
-	{
-		syslog(LOG_DEBUG, "send success\n");
-	}
-    syslog(LOG_DEBUG, "Closed connection from : %s\n", inet_ntoa(c.sin_addr));
+        {
+                syslog(LOG_DEBUG, "send success\n");
+        }
+    syslog(LOG_DEBUG, "Closed connection from : %s\n", inet_ntoa(client_so.sin_addr));
     free(read_packet);
     free(w_packet);
     }
@@ -209,3 +204,4 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
