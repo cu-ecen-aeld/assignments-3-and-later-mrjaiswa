@@ -1,6 +1,6 @@
 INCLUDE_DIRS = 
 LIB_DIRS = 
-CC?=gcc
+CC=gcc
 
 
 CFLAGS = -g -lpthread 
