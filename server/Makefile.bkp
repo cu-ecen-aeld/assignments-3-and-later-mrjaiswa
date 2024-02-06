@@ -1,12 +1,12 @@
 INCLUDE_DIRS = 
 LIB_DIRS = 
-CC?=gcc
+CC=gcc
 
 
-CFLAGS = -g -lpthread 
+CFLAGS = -g 
 all:aesdsocket
 
-	$(CROSS_COMPILE)$(CC) $(CFLAGS) aesdsocket.c -o aesdsocket 
+	$(CROSS_COMPILE)$(CC) aesdsocket.c -o aesdsocket 
 clean:
 	rm -f *.o aesdsocket *.elf *.map
 
