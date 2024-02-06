@@ -266,7 +266,7 @@ int main(int argc, char **argv) {
     if (pthread_create(&tstamp_tid,NULL,timestamp_thread,NULL) !=0)
         {
             fprintf(stderr, "Failed to create timestamp thread\n");
-            pthread_join(timestamp_thread, NULL);
+            //pthread_join(timestamp_thread, NULL);
             pthread_mutex_destroy(&file_mutex);
         }
 
@@ -293,7 +293,7 @@ int main(int argc, char **argv) {
             free(arg);
         }
     }
-    pthread_join(timestamp_thread, NULL);
+    //pthread_join(timestamp_thread, NULL);
     pthread_mutex_destroy(&file_mutex);
     close(sock_fd);
     close(file_fd);
