@@ -15,6 +15,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/queue.h>
+#include <pthread.h>
 #define PORT 9000
 #define FILE "/var/tmp/aesdsocketdata"
 #define MAX_BUFFER 1024
