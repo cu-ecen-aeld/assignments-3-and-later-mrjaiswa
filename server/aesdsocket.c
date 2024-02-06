@@ -100,8 +100,8 @@ void* timestamp_thread(void* arg) {
 }
 void *handle_connection(void *arg) {
     int acceptfd = *((int *)arg);
-    int recv_bytes, saved_bytes, send_bytes = 0, read_bytes_dummy = 0;
-    char *w_packet, *read_packet;
+    int recv_bytes, saved_bytes;
+    char *w_packet;
 
     char server_buffer[MAX_BUFFER];
     memset(server_buffer, '\0', MAX_BUFFER);
