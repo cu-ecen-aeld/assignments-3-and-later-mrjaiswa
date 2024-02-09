@@ -1,14 +1,19 @@
-INCLUDE_DIRS = 
-LIB_DIRS = 
-CC=gcc
-
-CFLAGS ?= -g -Werror -Wall
+# Cross compiler 
+CC ?= $(CROSS_COMPILE)gcc
+# Compiler Flags
+CFLAGS ?= -Wall -Werror -g
 LDFLAGS ?= -pthread -lrt
 
+# Executable
+SRCS = aesdsocket.c
+EXEC = aesdsocket
 
-all:aesdsocket
+default : $(EXEC)
+all : $(EXEC)
 
-	$(CROSS_COMPILE)$(CC) $(CFLAGS) $(LDFLAGS) aesdsocket.c -o aesdsocket 
+$(EXEC): $(SRCS)
+	$(CC) $(SRCS) $(CFLAGS) $(LDFLAGS) -o $(EXEC)
+
+
 clean:
-	rm -f *.o aesdsocket *.elf *.map
-
+	-rm -rf *.o $(EXEC)
