@@ -15,7 +15,8 @@
 #include <pthread.h>
 #include <signal.h>
 #include <sys/queue.h>
-#include <pthread.h>
+#include <time.h>
+
 #define PORT 9000
 #define FILE "/var/tmp/aesdsocketdata"
 #define MAX_BUFFER 1024
@@ -30,9 +31,10 @@ pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 pid_t pid;
 bool initial_sleep_done = false;
+bool terminate_program = false; // Flag to indicate termination signal received
+
 struct thread_data {
     pthread_t thread_id;
-
 };
 
 struct list_data {
@@ -43,13 +45,21 @@ struct list_data {
 void sig_handler(int signal) {
     printf("Caught signal %d\n", signal);
     if ((signal == SIGINT) || (signal == SIGTERM)) {
+        terminate_program = true;
+
+
+        syslog(LOG_INFO, "Closing file descriptor...\n");
         close(file_fd);
         close(sock_fd);
+        syslog(LOG_INFO, "Removing file %s...\n", FILE);
         remove(FILE);
+        syslog(LOG_INFO, "Destroying file mutex...\n");
         pthread_mutex_destroy(&file_mutex);
         exit(0);
+    
     }
 }
+
 void add_to_list(struct thread_data *data) {
     struct list_data *new_entry = malloc(sizeof(struct list_data));
     if (new_entry == NULL) {
@@ -69,35 +79,30 @@ void process_list() {
 
     pthread_mutex_lock(&list_mutex);
     SLIST_FOREACH(entry, &head, entries) {
-
-        printf("Thread ID: %lu\n", entry->info.thread_id);
-
+        syslog(LOG_INFO, "Thread ID: %lu\n", entry->info.thread_id);
     }
     pthread_mutex_unlock(&list_mutex);
 }
 
-
 void* timestamp_thread(void* arg) {
-    while (1) {
-        //sleep();
-
+    while (!terminate_program) {
         time_t current_time;
         time(&current_time);
         char timestamp[50];
-        strftime(timestamp, sizeof(timestamp), "timestamp:%a, %d %b %Y %H:%M:%S %z" , localtime(&current_time));
- 
+        strftime(timestamp, sizeof(timestamp), "timestamp:%a, %d %b %Y %H:%M:%S %z", localtime(&current_time));
+        syslog(LOG_INFO, "Timestamp: %s\n", timestamp);
         pthread_mutex_lock(&file_mutex);
-
         lseek(file_fd, 0, SEEK_END);  // Move to the end of the file
         write(file_fd, timestamp, strlen(timestamp));
         write(file_fd, "\n", 1);  // Add a newline character
-
         pthread_mutex_unlock(&file_mutex);
+
         sleep(10);
     }
 
-    pthread_exit(NULL);
+    return NULL;
 }
+
 void *handle_connection(void *arg) {
     int acceptfd = *((int *)arg);
     int recv_bytes, saved_bytes;
@@ -108,11 +113,15 @@ void *handle_connection(void *arg) {
     struct thread_data thread_info;
     thread_info.thread_id = pthread_self();
 
-
-
     w_packet = malloc(sizeof(char) * MAX_BUFFER);
-    bool packet_rx = false;
+    if (w_packet == NULL) {
+        perror("malloc failure");
+        close(acceptfd);
+        return NULL;
+    }
 
+    syslog(LOG_INFO, "Allocated memory for w_packet");
+    bool packet_rx = false;
     saved_bytes = 0;
 
     while (!packet_rx) {
@@ -120,37 +129,50 @@ void *handle_connection(void *arg) {
 
         if (recv_bytes == 0 || (strchr(server_buffer, '\n') != NULL)) {
             packet_rx = true;
-            //printf("Packet Completed\n");
         }
 
-        server_buffer[recv_bytes] = '\0';  // Ensure null-terminated string         
-        printf("Received %d bytes: %s\n", recv_bytes, server_buffer);             
-        size_t new_size = saved_bytes + recv_bytes;         
+        server_buffer[recv_bytes] = '\0';  // Ensure null-terminated string
+        syslog(LOG_INFO, "Received %d bytes: %s\n", recv_bytes, server_buffer);
+        size_t new_size = saved_bytes + recv_bytes;
+        syslog(LOG_INFO, "New size: %zu\n", new_size);
+
         w_packet = realloc(w_packet, sizeof(char) * new_size);
+        if (w_packet == NULL) {
+            perror("realloc failure");
+            close(acceptfd);
+            return NULL;
+        }
+        syslog(LOG_INFO, "Reallocated size: %zu bytes\n", new_size);
         memcpy(w_packet + saved_bytes, server_buffer, recv_bytes);
         saved_bytes += recv_bytes;
-       
     }
- 
+
+    if (w_packet == NULL) {
+        syslog(LOG_ERR, "w_packet is NULL after realloc");
+        close(acceptfd);
+        return NULL;
+    }
+
     pthread_mutex_lock(&file_mutex);
     lseek(file_fd, 0, SEEK_END);
-
     write(file_fd, w_packet, saved_bytes);
     pthread_mutex_unlock(&file_mutex);
-    pthread_mutex_lock(&file_mutex);
 
     off_t file_size_read = lseek(file_fd, 0, SEEK_END);
     if (file_size_read == -1) {
         perror("Error seeking file");
         close(file_fd);
-        exit(EXIT_FAILURE);
+        free(w_packet);
+        close(acceptfd);
+        return NULL;
     }
 
-    
     if (lseek(file_fd, 0, SEEK_SET) == -1) {
         perror("Error seeking file");
         close(file_fd);
-        exit(EXIT_FAILURE);
+        free(w_packet);
+        close(acceptfd);
+        return NULL;
     }
 
     long send_buffer_size = file_size_read;
@@ -158,27 +180,27 @@ void *handle_connection(void *arg) {
     char *send_buffer = malloc(send_buffer_size * sizeof(char));
     if (send_buffer == NULL) {
         perror("malloc failure");
-        exit(EXIT_FAILURE);
+        close(file_fd);
+        free(w_packet);
+        close(acceptfd);
+        return NULL;
     }
 
-    
     ssize_t read_bytes = read(file_fd, send_buffer, send_buffer_size);
     if (read_bytes == -1 || read_bytes != send_buffer_size) {
         perror("read");
         free(send_buffer);
         close(file_fd);
-        exit(EXIT_FAILURE);
+        free(w_packet);
+        close(acceptfd);
+        return NULL;
     }
 
     pthread_mutex_unlock(&file_mutex);
 
-
-    printf("Read data from file: %s\n", send_buffer);
-
     int status = send(acceptfd, send_buffer, read_bytes, SEND_FLAGS);
     if (status == -1) {
         perror("Error in send");
-        exit(-1);
     } else {
         syslog(LOG_DEBUG, "send success\n");
     }
@@ -187,7 +209,7 @@ void *handle_connection(void *arg) {
     free(send_buffer);
     close(acceptfd);
 
-    pthread_exit(NULL);
+    return NULL;
 }
 
 int main(int argc, char **argv) {
@@ -198,9 +220,7 @@ int main(int argc, char **argv) {
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd == -1) {
         syslog(LOG_ERR, "socket error = %d\n", errno);
-        exit(-1);
-    } else {
-        syslog(LOG_DEBUG, "socket success\n");
+        exit(EXIT_FAILURE);
     }
 
     int optval = 1;
@@ -215,17 +235,13 @@ int main(int argc, char **argv) {
     server_so.sin_port = htons(PORT);
 
     status = bind(sock_fd, (struct sockaddr *)&server_so, sizeof(struct sockaddr_in));
-
     if (status == -1) {
         syslog(LOG_ERR, "bind error ");
         fprintf(stderr, "bind error ");
-        exit(-1);
-    } else {
-        syslog(LOG_DEBUG, "bind success\n");
+        exit(EXIT_FAILURE);
     }
 
     if (argc > 1 && !strcmp(argv[1], "-d")) {
-
         pid_t pid = fork();
         if (pid == -1) {
             syslog(LOG_ERR, "error on : fork");
@@ -253,11 +269,13 @@ int main(int argc, char **argv) {
     status = listen(sock_fd, CONCURRENT_CONN);
     if (status == -1) {
         syslog(LOG_ERR, "Error in Listening");
-    } else {
-        syslog(LOG_DEBUG, "Successfully started Listening\n");
     }
 
     file_fd = open(FILE, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
+    if (file_fd == -1) {
+        syslog(LOG_ERR, "Error opening file: %s", FILE);
+        exit(EXIT_FAILURE);
+    }
 
     // Setup signal handler
     signal(SIGTERM, sig_handler);
@@ -265,15 +283,13 @@ int main(int argc, char **argv) {
     pthread_t tstamp_tid;
 
     if (pthread_create(&tstamp_tid,NULL,timestamp_thread,NULL) !=0)
-        {
-            fprintf(stderr, "Failed to create timestamp thread\n");
-            //pthread_join(timestamp_thread, NULL);
-            pthread_mutex_destroy(&file_mutex);
-        }
+    {
+        fprintf(stderr, "Failed to create timestamp thread\n");
+        pthread_mutex_destroy(&file_mutex);
+        return -1;
+    }
 
-
-
-    while (1) {
+    while (!terminate_program) {
         addr_size = sizeof(client_so);
         acceptfd = accept(sock_fd, (struct sockaddr *)&client_so, &addr_size);
         if (acceptfd == -1) {
@@ -294,7 +310,13 @@ int main(int argc, char **argv) {
             free(arg);
         }
     }
-    //pthread_join(timestamp_thread, NULL);
+    pthread_cancel(tstamp_tid);
+    // Join timestamp thread
+    if (pthread_join(tstamp_tid, NULL) != 0) {
+        fprintf(stderr, "Failed to join timestamp thread\n");
+    }
+
+    // Cleanup
     pthread_mutex_destroy(&file_mutex);
     close(sock_fd);
     close(file_fd);
@@ -302,3 +324,4 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+
