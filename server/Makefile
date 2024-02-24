@@ -4,6 +4,8 @@ CC ?= $(CROSS_COMPILE)gcc
 CFLAGS ?= -Wall -Werror -g
 LDFLAGS ?= -pthread -lrt
 
+
+
 # Executable
 SRCS = aesdsocket.c
 EXEC = aesdsocket

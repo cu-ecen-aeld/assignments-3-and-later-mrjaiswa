@@ -18,17 +18,25 @@
 #include <time.h>
 
 #define PORT 9000
-#define FILE "/var/tmp/aesdsocketdata"
 #define MAX_BUFFER 1024
 #define BUFFER_SIZE 256
 #define CONCURRENT_CONN 10
 #define SEND_FLAGS 0
 #define RECV_FLAGS 0
+#define USE_AESD_CHAR_DEVICE
+
+#ifdef USE_AESD_CHAR_DEVICE
+  #define FILE "/dev/aesdchar"
+#else
+  #define FILE "/var/tmp/aesdsocketdata"
+void* timestamp_thread(void* arg);
+#endif
+pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int file_fd, sock_fd;
 SLIST_HEAD(slisthead, list_data) head;
-pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 pid_t pid;
 bool initial_sleep_done = false;
 bool terminate_program = false; // Flag to indicate termination signal received
@@ -84,6 +92,7 @@ void process_list() {
     pthread_mutex_unlock(&list_mutex);
 }
 
+#ifndef USE_AESD_CHAR_DEVICE
 void* timestamp_thread(void* arg) {
     while (!terminate_program) {
         time_t current_time;
@@ -102,7 +111,7 @@ void* timestamp_thread(void* arg) {
 
     return NULL;
 }
-
+#endif
 void *handle_connection(void *arg) {
     int acceptfd = *((int *)arg);
     int recv_bytes, saved_bytes;
@@ -154,10 +163,11 @@ void *handle_connection(void *arg) {
     }
 
     pthread_mutex_lock(&file_mutex);
+    #ifndef USE_AESD_CHAR_DEVICE
     lseek(file_fd, 0, SEEK_END);
+    #endif
     write(file_fd, w_packet, saved_bytes);
     pthread_mutex_unlock(&file_mutex);
-
     off_t file_size_read = lseek(file_fd, 0, SEEK_END);
     if (file_size_read == -1) {
         perror("Error seeking file");
@@ -166,7 +176,7 @@ void *handle_connection(void *arg) {
         close(acceptfd);
         return NULL;
     }
-
+   #ifndef USE_AESD_CHAR_DEVICE
     if (lseek(file_fd, 0, SEEK_SET) == -1) {
         perror("Error seeking file");
         close(file_fd);
@@ -174,9 +184,8 @@ void *handle_connection(void *arg) {
         close(acceptfd);
         return NULL;
     }
-
+   #endif
     long send_buffer_size = file_size_read;
-
     char *send_buffer = malloc(send_buffer_size * sizeof(char));
     if (send_buffer == NULL) {
         perror("malloc failure");
@@ -280,15 +289,15 @@ int main(int argc, char **argv) {
     // Setup signal handler
     signal(SIGTERM, sig_handler);
     signal(SIGINT, sig_handler);
+    #ifndef USE_AESD_CHAR_DEVICE
     pthread_t tstamp_tid;
-
     if (pthread_create(&tstamp_tid,NULL,timestamp_thread,NULL) !=0)
     {
         fprintf(stderr, "Failed to create timestamp thread\n");
         pthread_mutex_destroy(&file_mutex);
         return -1;
     }
-
+   #endif
     while (!terminate_program) {
         addr_size = sizeof(client_so);
         acceptfd = accept(sock_fd, (struct sockaddr *)&client_so, &addr_size);
@@ -310,12 +319,13 @@ int main(int argc, char **argv) {
             free(arg);
         }
     }
+    #ifndef USE_AESD_CHAR_DEVICE
     pthread_cancel(tstamp_tid);
     // Join timestamp thread
     if (pthread_join(tstamp_tid, NULL) != 0) {
         fprintf(stderr, "Failed to join timestamp thread\n");
     }
-
+   #endif
     // Cleanup
     pthread_mutex_destroy(&file_mutex);
     close(sock_fd);
@@ -324,4 +334,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
