@@ -176,7 +176,7 @@ void *handle_connection(void *arg) {
         close(acceptfd);
         return NULL;
     }
-   #ifndef USE_AESD_CHAR_DEVICE
+   
     if (lseek(file_fd, 0, SEEK_SET) == -1) {
         perror("Error seeking file");
         close(file_fd);
@@ -184,7 +184,7 @@ void *handle_connection(void *arg) {
         close(acceptfd);
         return NULL;
     }
-   #endif
+   
     long send_buffer_size = file_size_read;
     char *send_buffer = malloc(send_buffer_size * sizeof(char));
     if (send_buffer == NULL) {
