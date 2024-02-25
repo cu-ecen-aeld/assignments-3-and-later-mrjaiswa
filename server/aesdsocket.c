@@ -330,7 +330,8 @@ int main(int argc, char **argv) {
     pthread_mutex_destroy(&file_mutex);
     close(sock_fd);
     close(file_fd);
+    #ifndef USE_AESD_CHAR_DEVICE
     remove(FILE);
-
+    #endif
     return 0;
 }
