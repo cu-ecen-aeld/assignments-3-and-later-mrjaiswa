@@ -1,4 +1,3 @@
-morpheus@Ultron:~/university-ECEA-Yoctco/assignments-3-and-later-mrjaiswa/server$ cat aesdsocket.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -346,5 +345,3 @@ int main(int argc, char **argv) {
 
     return 0;
 }
-
-morpheus@Ultron:~/university-ECEA-Yoctco/assignments-3-and-later-mrjaiswa/server$
