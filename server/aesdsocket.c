@@ -1,3 +1,4 @@
+morpheus@Ultron:~/university-ECEA-Yoctco/assignments-3-and-later-mrjaiswa/server$ cat aesdsocket.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -23,14 +24,14 @@
 #define CONCURRENT_CONN 10
 #define SEND_FLAGS 0
 #define RECV_FLAGS 0
-#define USE_AESD_CHAR_DEVICE
+#define USE_AESD_CHAR_DEVICE 1 // Build switch to use aesdchar device
 
 #ifdef USE_AESD_CHAR_DEVICE
-  #define FILE "/dev/aesdchar"
+#define FILE_PATH "/dev/aesdchar" // Use aesdchar device
 #else
-  #define FILE "/var/tmp/aesdsocketdata"
-void* timestamp_thread(void* arg);
+#define FILE_PATH "/var/tmp/aesdsocketdata"
 #endif
+
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -55,16 +56,12 @@ void sig_handler(int signal) {
     if ((signal == SIGINT) || (signal == SIGTERM)) {
         terminate_program = true;
 
-
         syslog(LOG_INFO, "Closing file descriptor...\n");
         close(file_fd);
         close(sock_fd);
-        syslog(LOG_INFO, "Removing file %s...\n", FILE);
-        remove(FILE);
         syslog(LOG_INFO, "Destroying file mutex...\n");
         pthread_mutex_destroy(&file_mutex);
         exit(0);
-    
     }
 }
 
@@ -112,6 +109,8 @@ void* timestamp_thread(void* arg) {
     return NULL;
 }
 #endif
+
+
 void *handle_connection(void *arg) {
     int acceptfd = *((int *)arg);
     int recv_bytes, saved_bytes;
@@ -168,6 +167,14 @@ void *handle_connection(void *arg) {
     #endif
     write(file_fd, w_packet, saved_bytes);
     pthread_mutex_unlock(&file_mutex);
+    if (lseek(file_fd, 0, SEEK_SET) == -1) {
+        perror("Error seeking file");
+        close(file_fd);
+        free(w_packet);
+        close(acceptfd);
+        return NULL;
+    }
+
     off_t file_size_read = lseek(file_fd, 0, SEEK_END);
     if (file_size_read == -1) {
         perror("Error seeking file");
@@ -176,21 +183,22 @@ void *handle_connection(void *arg) {
         close(acceptfd);
         return NULL;
     }
-   
-    if (lseek(file_fd, 0, SEEK_SET) == -1) {
-        perror("Error seeking file");
-        close(file_fd);
-        free(w_packet);
-        close(acceptfd);
-        return NULL;
-    }
-   
+
     long send_buffer_size = file_size_read;
     char *send_buffer = malloc(send_buffer_size * sizeof(char));
     if (send_buffer == NULL) {
         perror("malloc failure");
         close(file_fd);
         free(w_packet);
+        close(acceptfd);
+        return NULL;
+    }
+
+    if (lseek(file_fd, 0, SEEK_SET) == -1) {
+        perror("Error seeking file");
+        close(file_fd);
+        free(w_packet);
+        free(send_buffer);
         close(acceptfd);
         return NULL;
     }
@@ -221,6 +229,9 @@ void *handle_connection(void *arg) {
     return NULL;
 }
 
+
+
+
 int main(int argc, char **argv) {
     struct sockaddr_in server_so, client_so;
     int status, acceptfd;
@@ -249,7 +260,6 @@ int main(int argc, char **argv) {
         fprintf(stderr, "bind error ");
         exit(EXIT_FAILURE);
     }
-
     if (argc > 1 && !strcmp(argv[1], "-d")) {
         pid_t pid = fork();
         if (pid == -1) {
@@ -274,22 +284,12 @@ int main(int argc, char **argv) {
         dup(0);
         printf("Daemon Started\n");
     }
-
     status = listen(sock_fd, CONCURRENT_CONN);
     if (status == -1) {
         syslog(LOG_ERR, "Error in Listening");
     }
 
-    file_fd = open(FILE, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
-    if (file_fd == -1) {
-        syslog(LOG_ERR, "Error opening file: %s", FILE);
-        exit(EXIT_FAILURE);
-    }
-
-    // Setup signal handler
-    signal(SIGTERM, sig_handler);
-    signal(SIGINT, sig_handler);
-    #ifndef USE_AESD_CHAR_DEVICE
+#ifndef USE_AESD_CHAR_DEVICE
     pthread_t tstamp_tid;
     if (pthread_create(&tstamp_tid,NULL,timestamp_thread,NULL) !=0)
     {
@@ -297,7 +297,18 @@ int main(int argc, char **argv) {
         pthread_mutex_destroy(&file_mutex);
         return -1;
     }
-   #endif
+#endif
+
+    file_fd = open(FILE_PATH, O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
+    if (file_fd == -1) {
+        syslog(LOG_ERR, "Error opening file: %s", FILE_PATH);
+        exit(EXIT_FAILURE);
+    }
+
+    // Setup signal handler
+    signal(SIGTERM, sig_handler);
+    signal(SIGINT, sig_handler);
+
     while (!terminate_program) {
         addr_size = sizeof(client_so);
         acceptfd = accept(sock_fd, (struct sockaddr *)&client_so, &addr_size);
@@ -319,19 +330,21 @@ int main(int argc, char **argv) {
             free(arg);
         }
     }
-    #ifndef USE_AESD_CHAR_DEVICE
+
+#ifndef USE_AESD_CHAR_DEVICE
     pthread_cancel(tstamp_tid);
     // Join timestamp thread
     if (pthread_join(tstamp_tid, NULL) != 0) {
         fprintf(stderr, "Failed to join timestamp thread\n");
     }
-   #endif
+#endif
+
     // Cleanup
     pthread_mutex_destroy(&file_mutex);
     close(sock_fd);
     close(file_fd);
-    #ifndef USE_AESD_CHAR_DEVICE
-    remove(FILE);
-    #endif
+
     return 0;
 }
+
+morpheus@Ultron:~/university-ECEA-Yoctco/assignments-3-and-later-mrjaiswa/server$

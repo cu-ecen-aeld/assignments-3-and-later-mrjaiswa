@@ -104,6 +104,7 @@ out:
     return retval;
 }
 
+
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
 {
     ssize_t retval = 0;
