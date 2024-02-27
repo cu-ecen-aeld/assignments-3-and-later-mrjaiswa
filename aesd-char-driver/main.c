@@ -13,7 +13,6 @@
  */
 
 
-
 #include "aesdchar.h"
 
 #include <linux/module.h>
@@ -104,79 +103,64 @@ out:
     return retval;
 }
 
-
-ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t aesd_write(struct file *filp, const char __user *buf,
+			  size_t count, loff_t *f_pos)
 {
-    ssize_t retval = 0;
-    unsigned long bytes_rem;
-    struct aesd_buffer_entry entry;
+	ssize_t retval = 0;
+	size_t index;
+	char *new_buffptr;
+	const char *del_buffptr;
+	unsigned long not_copied;
+	struct aesd_buffer_entry entry;
 
-    PDEBUG("write %zu bytes with offset %lld", count, *f_pos);
+	PDEBUG("write %zu bytes with offset %lld", count, *f_pos);
 
-    mutex_lock(&aesd_device.mutx_lock);
+	mutex_lock(&aesd_device.mutx_lock);
 
-    // Check if buffer pointer is NULL
-    if (!buf) {
-        //mutex_unlock(&aesd_device.mutx_lock);
-        goto write_unlock;
-	PDEBUG("buffer pointer is NULL");
-        return -EINVAL;
-    }
+	if (aesd_device.capacity - aesd_device.offset < count) {
+		new_buffptr = krealloc(aesd_device.buffptr,
+				       aesd_device.capacity + count,
+				       GFP_KERNEL);
+		if (new_buffptr == NULL) {
+			PDEBUG("failed to alloc");
+			retval = -ENOMEM;
+			goto write_unlock;
+		}
+		aesd_device.buffptr = new_buffptr;
+		aesd_device.capacity += count;
+	}
 
-    // Check if count is negative
-    if (count < 0) {
-        //mutex_unlock(&aesd_device.mutx_lock);
-        goto write_unlock;
-	PDEBUG("count is negative");
-        return -EINVAL;
-    }
+	not_copied = copy_from_user(&aesd_device.buffptr[aesd_device.offset],
+				    buf, count);
+	retval = count - not_copied;
+	aesd_device.offset += retval;
 
-    // Check for buffer overflow
-    if (aesd_device.offset + count > aesd_device.capacity) {
-        size_t required_capacity = aesd_device.offset + count;
-        char *new_buffptr = krealloc(aesd_device.buffptr, required_capacity, GFP_KERNEL);
-        if (new_buffptr == NULL) {
-            PDEBUG("failed to allocate memory");
-            retval = -ENOMEM;
-            goto write_unlock;
-        }
-        aesd_device.buffptr = new_buffptr;
-        aesd_device.capacity = required_capacity;
-    }
-    // Copy data from user space to kernel space
-    bytes_rem = copy_from_user(&aesd_device.buffptr[aesd_device.offset], buf, count);
-    if (bytes_rem != 0) {
-        retval = -EFAULT;
-        PDEBUG("failed to copy data from user space");
-        goto write_unlock;
-    }
-    aesd_device.offset += count;
+	for (index = 0; index < aesd_device.offset; index++) {
+		if (aesd_device.buffptr[index] == '\n') {
+			entry.buffptr = aesd_device.buffptr;
+			entry.size = index + 1;
+			del_buffptr = aesd_circular_buffer_add_entry(
+				&aesd_device.buffer, &entry);
+			kfree(del_buffptr);
+			aesd_device.buffptr = NULL;
+			aesd_device.capacity = 0;
+			aesd_device.offset = 0;
+			PDEBUG("found newline character, command complete");
+			break;
+		}
+	}
 
-    // Check for newline character to indicate end of command
-    char *newline_ptr = strchr(aesd_device.buffptr, '\n');
-    if (newline_ptr != NULL) {
-        size_t newline_index = newline_ptr - aesd_device.buffptr + 1;
-        entry.buffptr = aesd_device.buffptr;
-        entry.size = newline_index;
-        const char *del_buffptr = aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
-        kfree(del_buffptr);
-        aesd_device.buffptr = NULL;
-        aesd_device.capacity = 0;
-        aesd_device.offset = 0;
-        PDEBUG("found newline character, command complete");
-    }
+write_unlock:
+	mutex_unlock(&aesd_device.mutx_lock);
 
-    write_unlock:
-        mutex_unlock(&aesd_device.mutx_lock);
+	if (retval < 0) {
+		PDEBUG("write error %ld", retval);
+	} else {
+		PDEBUG("wrote %ld bytes", retval);
+	}
 
-        if (retval < 0) {
-            PDEBUG("write error %ld", retval);
-        } else {
-            PDEBUG("wrote %zu bytes", count);
-        }
-
-        return retval >= 0 ? count : retval;
-   }
+	return retval;
+}
 
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
@@ -248,3 +232,4 @@ void aesd_cleanup_module(void)
 
 module_init(aesd_init_module);
 module_exit(aesd_cleanup_module);
+
