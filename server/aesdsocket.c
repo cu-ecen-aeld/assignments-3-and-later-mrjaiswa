@@ -338,6 +338,7 @@ int main(int argc, char **argv) {
     }
 #endif
 
+     unlink(FILE_PATH);
     // Cleanup
     pthread_mutex_destroy(&file_mutex);
     close(sock_fd);
