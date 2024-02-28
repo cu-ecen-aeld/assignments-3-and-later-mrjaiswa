@@ -181,6 +181,7 @@ static ssize_t aesd_write(struct file *filp, const char __user *buf,
 			aesd_device.buffptr = NULL;
 			aesd_device.capacity = 0;
 			aesd_device.offset = 0;
+			PDEBUG("found newline character, command complete");
 			break;
 		}
 	}
