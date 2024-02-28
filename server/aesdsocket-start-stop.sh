@@ -6,11 +6,12 @@ case "$1" in
     start)
         if [ ! -e "$FLAG_FILE" ]; then
             echo "Aesdsocket called for the first time"
-            
+            sleep 15
+            start-stop-daemon -S -n aesdsocket -a /usr/bin/aesdsocket -- -d
             touch "$FLAG_FILE"
         else
             
-            echo "Starting aesdsocket for the first time"
+            echo "Starting aesdsocket for the second time"
             start-stop-daemon -S -n aesdsocket -a /usr/bin/aesdsocket -- -d
             touch "$FLAG_FILE"
         fi
