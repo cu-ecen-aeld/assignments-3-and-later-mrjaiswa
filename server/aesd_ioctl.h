@@ -23,14 +23,14 @@
  * of seek performed on the aesdchar driver
  */
 struct aesd_seekto {
-    /**
+	/**
      * The zero referenced write command to seek into
      */
-    uint32_t write_cmd;
-    /**
+	uint32_t write_cmd;
+	/**
      * The zero referenced offset within the write
      */
-    uint32_t write_cmd_offset;
+	uint32_t write_cmd_offset;
 };
 
 // Pick an arbitrary unused value from https://github.com/torvalds/linux/blob/master/Documentation/userspace-api/ioctl/ioctl-number.rst
@@ -44,3 +44,5 @@ struct aesd_seekto {
 #define AESDCHAR_IOC_MAXNR 1
 
 #endif /* AESD_IOCTL_H */
+
+
