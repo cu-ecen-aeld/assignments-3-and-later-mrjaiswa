@@ -1,23 +1,21 @@
-TARGET := aesdsocket
+# Cross compiler
+CC ?= $(CROSS_COMPILE)gcc
+# Compiler Flags
+CFLAGS ?= -Wall -Werror -g
+LDFLAGS ?= -pthread -lrt
 
-CFLAGS ?= -g -Wall -Werror -pthread
-# Must be after source files on Ubuntu 20.04 and older (i.e. use LDLIBS not LDFLAGS)
-LDLIBS ?= -lrt
 
-USE_AESD_CHAR_DEVICE ?= 1
 
-ifeq ($(USE_AESD_CHAR_DEVICE),1)
-  DEFINES += -DUSE_AESD_CHAR_DEVICE
-endif
+# Executable
+SRCS = aesdsocket.c
+EXEC = aesdsocket
 
-override CFLAGS := $(CFLAGS) $(DEFINES)
+default : $(EXEC)
+all : $(EXEC)
 
-.PHONY: all
-all: $(TARGET)
+$(EXEC): $(SRCS)
+	$(CC) $(SRCS) $(CFLAGS) $(LDFLAGS) -o $(EXEC)
 
-# Use default rule %: %.c (see make -p)
-$(TARGET): $(TARGET).c
 
-.PHONY: clean
 clean:
-	-${RM} $(TARGET)
+	-rm -rf *.o $(EXEC)
