@@ -46,59 +46,54 @@ int aesd_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
-static ssize_t aesd_read(struct file *filp, char __user *buff, size_t count, loff_t *offp)
+static ssize_t aesd_read(struct file *filp, char __user *buff, size_t count,
+			 loff_t *offp)
 {
-    struct aesd_buffer_entry *entry;
-    size_t entry_offset;
-    size_t buff_index;
-    size_t min_length;
-    unsigned long not_copied;
-    ssize_t retval = 0;
+	struct aesd_buffer_entry *entry;
+	size_t entry_offset;
+	size_t buff_index;
+	size_t min_length;
+	unsigned long not_copied;
+	ssize_t retval = 0;
 
-    printk(KERN_DEBUG "AESD Driver: Reading %zu bytes with offset %lld\n", count, *offp);
-    PDEBUG("read %zu bytes with offset %lld", count, *offp);
+	PDEBUG("read %zu bytes with offset %lld", count, *offp);
 
-    mutex_lock(&aesd_device.lock);
+	mutex_lock(&aesd_device.lock);
 
-    buff_index = 0;
-    while (buff_index < count) {
-        entry = aesd_circular_buffer_find_entry_offset_for_fpos(
-            &aesd_device.buffer, *offp, &entry_offset);
-        if (entry == NULL) {
-            printk(KERN_DEBUG "AESD Driver: No buffer entry found for offset %lld\n", *offp);
-            PDEBUG("No buffer entry found for offset %lld", *offp);
-            break;
-        }
+	buff_index = 0;
+	while (buff_index < count) {
+		entry = aesd_circular_buffer_find_entry_offset_for_fpos(
+			&aesd_device.buffer, *offp, &entry_offset);
+		if (entry == NULL) {
+			break;
+		}
 
-        min_length = min(count - buff_index, entry->size - entry_offset);
-        not_copied = copy_to_user(&buff[buff_index],
-                                  &entry->buffptr[entry_offset],
-                                  min_length);
-        if (not_copied != 0) {
-            retval = -EFAULT;
-            printk(KERN_ERR "AESD Driver: Error copying data to user space\n");
-            PDEBUG("Error copying data to user space");
-            goto read_unlock;
-        }
+		min_length =
+			min(count - buff_index, entry->size - entry_offset);
+		not_copied = copy_to_user(&buff[buff_index],
+					  &entry->buffptr[entry_offset],
+					  min_length);
+		if (not_copied != 0) {
+			retval = -EFAULT;
+			goto read_unlock;
+		}
 
-        buff_index += min_length;
-        *offp += min_length;
-    }
+		buff_index += min_length;
+		*offp += min_length;
+	}
 
-    retval = buff_index;
+	retval = buff_index;
 
 read_unlock:
-    mutex_unlock(&aesd_device.lock);
+	mutex_unlock(&aesd_device.lock);
 
-    if (retval < 0) {
-        printk(KERN_DEBUG "AESD Driver: Read error %ld\n", retval);
-        PDEBUG("read error %ld", retval);
-    } else {
-        printk(KERN_DEBUG "AESD Driver: Read %ld bytes\n", retval);
-        PDEBUG("read %ld bytes", retval);
-    }
+	if (retval < 0) {
+		PDEBUG("read error %ld", retval);
+	} else {
+		PDEBUG("read %ld bytes", retval);
+	}
 
-    return retval;
+	return retval;
 }
 
 static ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
