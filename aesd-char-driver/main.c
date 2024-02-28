@@ -96,64 +96,62 @@ read_unlock:
 	return retval;
 }
 
-static ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
+static ssize_t aesd_write(struct file *filp, const char __user *buf,
+			  size_t count, loff_t *f_pos)
 {
-    ssize_t retval = 0;
-    size_t index = 0;
-    char *new_buffptr;
-    const char *del_buffptr;
-    unsigned long not_copied;
-    struct aesd_buffer_entry entry;
+	ssize_t retval = 0;
+	size_t index;
+	char *new_buffptr;
+	const char *del_buffptr;
+	unsigned long not_copied;
+	struct aesd_buffer_entry entry;
 
-    printk(KERN_DEBUG "AESD Driver: Writing %zu bytes with offset %lld\n", count, *f_pos);
-    pr_debug("write %zu bytes with offset %lld\n", count, *f_pos);
+	PDEBUG("write %zu bytes with offset %lld", count, *f_pos);
 
-    mutex_lock(&aesd_device.lock);
+	mutex_lock(&aesd_device.lock);
 
-    if (aesd_device.capacity - aesd_device.offset < count) {
-        new_buffptr = krealloc(aesd_device.buffptr, aesd_device.capacity + count, GFP_KERNEL);
-        if (new_buffptr == NULL) {
-            printk(KERN_DEBUG "AESD Driver: Failed to allocate memory\n");
-            pr_debug("failed to allocate memory\n");
-            retval = -ENOMEM;
-            goto write_unlock;
-        }
-        aesd_device.buffptr = new_buffptr;
-        aesd_device.capacity += count;
-    }
+	if (aesd_device.capacity - aesd_device.offset < count) {
+		new_buffptr = krealloc(aesd_device.buffptr,
+				       aesd_device.capacity + count,
+				       GFP_KERNEL);
+		if (new_buffptr == NULL) {
+			PDEBUG("failed to alloc");
+			retval = -ENOMEM;
+			goto write_unlock;
+		}
+		aesd_device.buffptr = new_buffptr;
+		aesd_device.capacity += count;
+	}
 
-    not_copied = copy_from_user(&aesd_device.buffptr[aesd_device.offset], buf, count);
-    retval = count - not_copied;
-    aesd_device.offset += retval;
+	not_copied = copy_from_user(&aesd_device.buffptr[aesd_device.offset],
+				    buf, count);
+	retval = count - not_copied;
+	aesd_device.offset += retval;
 
-    while (index < aesd_device.offset) {
-        if (aesd_device.buffptr[index] == '\n') {
-            entry.buffptr = aesd_device.buffptr;
-            entry.size = index + 1;
-            del_buffptr = aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
-            kfree(del_buffptr);
-            aesd_device.buffptr = NULL;
-            aesd_device.capacity = 0;
-            aesd_device.offset = 0;
-            printk(KERN_DEBUG "AESD Driver: Found newline character, command complete\n");
-            pr_debug("found newline character, command complete\n");
-            break;
-        }
-        index++;
-    }
+	for (index = 0; index < aesd_device.offset; index++) {
+		if (aesd_device.buffptr[index] == '\n') {
+			entry.buffptr = aesd_device.buffptr;
+			entry.size = index + 1;
+			del_buffptr = aesd_circular_buffer_add_entry(
+				&aesd_device.buffer, &entry);
+			kfree(del_buffptr);
+			aesd_device.buffptr = NULL;
+			aesd_device.capacity = 0;
+			aesd_device.offset = 0;
+			break;
+		}
+	}
 
 write_unlock:
-    mutex_unlock(&aesd_device.lock);
+	mutex_unlock(&aesd_device.lock);
 
-    if (retval < 0) {
-        printk(KERN_DEBUG "AESD Driver: Write error %ld\n", retval);
-        pr_debug("write error %ld\n", retval);
-    } else {
-        printk(KERN_DEBUG "AESD Driver: Wrote %ld bytes\n", retval);
-        pr_debug("wrote %ld bytes\n", retval);
-    }
+	if (retval < 0) {
+		PDEBUG("write error %ld", retval);
+	} else {
+		PDEBUG("wrote %ld bytes", retval);
+	}
 
-    return retval;
+	return retval;
 }
 
 
