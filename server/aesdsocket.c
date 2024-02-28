@@ -240,7 +240,7 @@ void* thread_function(void* parameters) {
         syslog(LOG_ERR, "Failed to open file %s: %s", AESD_DATA_FILEPATH, strerror(errno));
         return NULL;
     }
-
+/**
     if (strncmp(received_packets, ioctl_string, strlen(ioctl_string)) == 0) {
         struct aesd_seekto seek_info;
         sscanf(received_packets, "AESDCHAR_IOCSEEKTO:%d,%d", &seek_info.write_cmd, &seek_info.write_cmd_offset);
@@ -255,7 +255,13 @@ void* thread_function(void* parameters) {
             syslog(LOG_INFO, "Bytes written: %d", bytes_written);
         }
     }
-
+*/
+    int bytes_written = write(aesd_data_fd, received_packets, count * TEMP_BUFFER_SIZE);
+    if (bytes_written == -1) {
+            syslog(LOG_ERR, "Write failed: %s", strerror(errno));
+    } else {
+          syslog(LOG_INFO, "Bytes written: %d", bytes_written);
+    }
     lseek(aesd_data_fd, 0, SEEK_SET);
 
     int read_bytes;
