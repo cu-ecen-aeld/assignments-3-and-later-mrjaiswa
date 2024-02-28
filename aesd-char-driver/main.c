@@ -139,63 +139,70 @@ read_unlock:
 	return retval;
 }
 
-static ssize_t aesd_write(struct file *filp, const char __user *buf,
-			  size_t count, loff_t *f_pos)
+ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
+                loff_t *f_pos)
 {
-	ssize_t retval = 0;
-	size_t index;
-	char *new_buffptr;
-	const char *del_buffptr;
-	unsigned long not_copied;
-	struct aesd_buffer_entry entry;
+    ssize_t retval = -ENOMEM;
+    struct aesd_buffer_entry entry;
+    char* temp;
+    size_t total;
 
-	PDEBUG("write %zu bytes with offset %lld", count, *f_pos);
+    PDEBUG("write %zu bytes with offset %lld",count,*f_pos);
 
-	mutex_lock(&aesd_device.lock);
-
-	if (aesd_device.capacity - aesd_device.offset < count) {
-		new_buffptr = krealloc(aesd_device.buffptr,
-				       aesd_device.capacity + count,
-				       GFP_KERNEL);
-		if (new_buffptr == NULL) {
-			PDEBUG("failed to alloc");
-			retval = -ENOMEM;
-			goto write_unlock;
-		}
-		aesd_device.buffptr = new_buffptr;
-		aesd_device.capacity += count;
-	}
-
-	not_copied = copy_from_user(&aesd_device.buffptr[aesd_device.offset],
-				    buf, count);
-	retval = count - not_copied;
-	aesd_device.offset += retval;
-
-	for (index = 0; index < aesd_device.offset; index++) {
-		if (aesd_device.buffptr[index] == '\n') {
-			entry.buffptr = aesd_device.buffptr;
-			entry.size = index + 1;
-			del_buffptr = aesd_circular_buffer_add_entry(
-				&aesd_device.buffer, &entry);
-			kfree(del_buffptr);
-			aesd_device.buffptr = NULL;
-			aesd_device.capacity = 0;
-			aesd_device.offset = 0;
-			PDEBUG("found newline character, command complete");
-			break;
-		}
-	}
-
-write_unlock:
-	mutex_unlock(&aesd_device.lock);
-
-	if (retval < 0) {
-		PDEBUG("write error %ld", retval);
-	} else {
-		PDEBUG("wrote %ld bytes", retval);
-	}
-
+    total = count + aesd_device.temp_buf_size;
+    
+    temp = (char *)kmalloc(total, GFP_KERNEL);
+    if (!temp) {
+    	printk("Error: No memory allocated\n");
 	return retval;
+    }
+
+    if (aesd_device.temp_buf != NULL) {
+    	memcpy(temp, aesd_device.temp_buf, aesd_device.temp_buf_size);
+    }
+
+    if (copy_from_user(temp + aesd_device.temp_buf_size, buf, count) != 0) {
+        printk("copy_from_user failed");
+        return 0;	
+    }
+
+    if (temp[total - 1] == '\n') {
+    	
+	entry.buffptr = temp;
+    
+        entry.size = total;
+
+	mutex_lock(&aesd_device.aesd_mutex);
+        aesd_circular_buffer_add_entry(&aesd_device.buffer, &entry);
+
+
+        *f_pos += total;
+
+        retval = count;
+
+        if (aesd_device.temp_buf != NULL) {
+            kfree(aesd_device.temp_buf);
+	    aesd_device.temp_buf = NULL;
+	    aesd_device.temp_buf_size = 0;
+	}
+
+	mutex_unlock(&aesd_device.aesd_mutex);
+    
+    } else {
+
+        if (aesd_device.temp_buf)
+		kfree(aesd_device.temp_buf);
+
+	mutex_lock(&aesd_device.aesd_mutex);
+	aesd_device.temp_buf = temp;
+	aesd_device.temp_buf_size += count;
+
+	mutex_unlock(&aesd_device.aesd_mutex);
+	retval = count;
+    }
+
+
+    return retval;
 }
 
 static long aesd_unlocked_ioctl(struct file *file, unsigned int cmd,
