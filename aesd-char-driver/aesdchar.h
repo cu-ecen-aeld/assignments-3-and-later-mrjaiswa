@@ -28,11 +28,12 @@
 
 struct aesd_dev
 {
-    struct aesd_circular_buffer buffer;
-    char *temp_buf;
-    size_t temp_buf_size;
-    struct mutex aesd_mutex; 
-    struct cdev cdev;     /* Char device structure      */ 
+	struct mutex lock;
+	struct aesd_circular_buffer buffer;
+	char *buffptr;
+	size_t capacity;
+	size_t offset;
+	struct cdev cdev;
 };
 
 
