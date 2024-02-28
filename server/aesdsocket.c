@@ -76,7 +76,26 @@ void sig_handler(int signal) {
         exit(0);
     }
 }
+#ifndef USE_AESD_CHAR_DEVICE
+void* timestamp_thread(void* arg) {
+    while (!terminate_program) {
+        time_t current_time;
+        time(&current_time);
+        char timestamp[50];
+        strftime(timestamp, sizeof(timestamp), "timestamp:%a, %d %b %Y %H:%M:%S %z", localtime(&current_time));
+        syslog(LOG_INFO, "Timestamp: %s\n", timestamp);
+        pthread_mutex_lock(&file_mutex);
+        lseek(file_fd, 0, SEEK_END);  // Move to the end of the file
+        write(file_fd, timestamp, strlen(timestamp));
+        write(file_fd, "\n", 1);  // Add a newline character
+        pthread_mutex_unlock(&file_mutex);
 
+        sleep(10);
+    }
+
+    return NULL;
+}
+#endif
 void add_to_list(struct thread_data *data) {
     struct list_data *new_entry = malloc(sizeof(struct list_data));
     if (new_entry == NULL) {
@@ -100,7 +119,7 @@ void process_list() {
     }
     pthread_mutex_unlock(&list_mutex);
 }
-
+/**
 void* thread_function(void* parameters) {
     struct thread_data *thread_data = (struct thread_data *)parameters;
     char address_string[20];
@@ -178,6 +197,89 @@ void* thread_function(void* parameters) {
     syslog(LOG_DEBUG, "Closed with %s\n", client_ip);
     return NULL;
 }
+*/
+
+void* thread_function(void* parameters) {
+    struct thread_data *thread_data = (struct thread_data *)parameters;
+    char address_string[20];
+    const char *client_ip;
+    struct sockaddr_in *addr = &thread_data->client_address;
+    char temp_buffer[TEMP_BUFFER_SIZE];
+    int packet_size;
+    bool packet_received = false;
+    int count = 0;
+    char *received_packets = NULL;
+
+    client_ip = inet_ntop(AF_INET, &addr->sin_addr, address_string, sizeof(address_string));
+    syslog(LOG_DEBUG, "Connected with %s\n", client_ip);
+
+    while (!packet_received) {
+        packet_size = recv(thread_data->client_fd, temp_buffer, TEMP_BUFFER_SIZE, 0);
+        if (packet_size == -1) {
+            syslog(LOG_ERR, "recv error: %s\n", strerror(errno));
+            break;
+        }
+        for (int i = 0; i < packet_size; i++) {
+            if (temp_buffer[i] == '\n') {
+                packet_received = true;
+                break;
+            }
+        }
+
+        received_packets = realloc(received_packets, count * TEMP_BUFFER_SIZE + packet_size);
+        if (received_packets == NULL) {
+            syslog(LOG_ERR, "realloc failed");
+            break;
+        }
+        memcpy(received_packets + count * TEMP_BUFFER_SIZE, temp_buffer, packet_size);
+        count++;
+    }
+
+    int aesd_data_fd = open(AESD_DATA_FILEPATH, O_RDWR | O_CREAT | O_APPEND, 0666);
+    if (aesd_data_fd == -1) {
+        syslog(LOG_ERR, "Failed to open file %s: %s", AESD_DATA_FILEPATH, strerror(errno));
+        return NULL;
+    }
+
+    if (strncmp(received_packets, ioctl_string, strlen(ioctl_string)) == 0) {
+        struct aesd_seekto seek_info;
+        sscanf(received_packets, "AESDCHAR_IOCSEEKTO:%d,%d", &seek_info.write_cmd, &seek_info.write_cmd_offset);
+        if (ioctl(aesd_data_fd, AESDCHAR_IOCSEEKTO, &seek_info)) {
+            syslog(LOG_ERR, "Ioctl failed: %s", strerror(errno));
+        }
+    } else {
+        int bytes_written = write(aesd_data_fd, received_packets, count * TEMP_BUFFER_SIZE);
+        if (bytes_written == -1) {
+            syslog(LOG_ERR, "Write failed: %s", strerror(errno));
+        } else {
+            syslog(LOG_INFO, "Bytes written: %d", bytes_written);
+        }
+    }
+
+    lseek(aesd_data_fd, 0, SEEK_SET);
+
+    int read_bytes;
+    char recv_buffer[TEMP_BUFFER_SIZE];
+    while ((read_bytes = read(aesd_data_fd, recv_buffer, TEMP_BUFFER_SIZE)) > 0) {
+        int bytes_sent = send(thread_data->client_fd, recv_buffer, read_bytes, 0);
+        if (bytes_sent == -1) {
+            syslog(LOG_ERR, "send error: %s", strerror(errno));
+            break;
+        }
+    }
+
+    if (read_bytes == -1) {
+        syslog(LOG_ERR, "read failed: %s", strerror(errno));
+    }
+
+    free(received_packets);
+    close(aesd_data_fd);
+    close(thread_data->client_fd);
+    thread_data->thread_status = true;
+    syslog(LOG_DEBUG, "Closed with %s\n", client_ip);
+    return NULL;
+}
+
 
 void cleanup() {
     close(server_socket_fd);
@@ -281,19 +383,21 @@ int main(int argc, char *argv[]) {
         closelog();
         return -1;
     }
-
+ #ifndef USE_AESD_CHAR_DEVICE
+    pthread_t tstamp_tid;
+    if (pthread_create(&tstamp_tid,NULL,timestamp_thread,NULL) !=0)
+    {
+        fprintf(stderr, "Failed to create timestamp thread\n");
+        pthread_mutex_destroy(&file_mutex);
+        return -1;
+    }
+#endif
     freeaddrinfo(server_info);
     addr_size = sizeof(client_address);
 
     SLIST_INIT(&head);
 
     while (!closed_flag) {
-#ifndef USE_AESD_CHAR_DEVICE
-        if (elapsed_10_seconds) {
-            elapsed_10_seconds = false;
-            timer_callback();
-        }
-#endif
 
         status = 0;
 
@@ -319,7 +423,13 @@ int main(int argc, char *argv[]) {
 
         add_to_list(new_thread_data);
     }
-
+#ifndef USE_AESD_CHAR_DEVICE
+    pthread_cancel(tstamp_tid);
+    // Join timestamp thread
+    if (pthread_join(tstamp_tid, NULL) != 0) {
+        fprintf(stderr, "Failed to join timestamp thread\n");
+    }
+#endif
     process_list();
 
     cleanup();
