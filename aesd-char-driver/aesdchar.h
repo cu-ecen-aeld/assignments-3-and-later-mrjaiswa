@@ -7,11 +7,10 @@
 
 #ifndef AESD_CHAR_DRIVER_AESDCHAR_H_
 #define AESD_CHAR_DRIVER_AESDCHAR_H_
+#include <linux/cdev.h>
+#include <linux/mutex.h>
 
-#include <linux/cdev.h> // cdev_init(), cdev_add(), cdev_del()
 #include "aesd-circular-buffer.h"
-// #include <stdio.h> // for stderr. Will this cause issues to include this??
-
 #define AESD_DEBUG 1  //Remove comment on this line to enable debug
 
 #undef PDEBUG             /* undef it, just in case */
@@ -29,12 +28,16 @@
 
 struct aesd_dev
 {
-    // TODO: Add structure(s) and locks needed to complete assignment requirements
-    struct cdev cdev;     /* Char device structure      */
-    struct mutex lock;
-    struct aesd_circular_buffer circ_buffer;
-    char *incomplete_write_buffer;
-    size_t incomplete_write_buffer_size;
+	struct mutex lock;
+	struct aesd_circular_buffer buffer;
+	char *buffptr;
+	size_t capacity;
+	size_t offset;
+	char *temp_buf;
+	 struct mutex mutx_lock;
+	 size_t temp_buf_size;
+	 struct mutex aesd_mutex;
+	struct cdev cdev;
 };
 
 
