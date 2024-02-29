@@ -189,7 +189,7 @@ void* thread_function(void* parameters) {
     if (read_bytes == -1) {
         syslog(LOG_ERR, "read failed: %s", strerror(errno));
     }
-
+// removed unlin
     free(received_packets);
     close(aesd_data_fd);
     //unlink(AESD_DATA_FILEPATH);
