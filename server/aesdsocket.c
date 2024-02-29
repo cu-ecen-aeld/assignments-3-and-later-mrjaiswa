@@ -155,13 +155,13 @@ void* thread_function(void* parameters) {
         memcpy(received_packets + count * TEMP_BUFFER_SIZE, temp_buffer, packet_size);
         count++;
     }
-
+   #ifdef USE_AESD_CHAR_DEVICE
     int aesd_data_fd = open(AESD_DATA_FILEPATH, O_RDWR | O_CREAT | O_APPEND, 0666);
     if (aesd_data_fd == -1) {
         syslog(LOG_ERR, "Failed to open file %s: %s", AESD_DATA_FILEPATH, strerror(errno));
         return NULL;
     }
-
+   #endif
     if (strncmp(received_packets, ioctl_string, strlen(ioctl_string)) == 0) {
         struct aesd_seekto seek_info;
         sscanf(received_packets, "AESDCHAR_IOCSEEKTO:%d,%d", &seek_info.write_cmd, &seek_info.write_cmd_offset);
@@ -201,7 +201,7 @@ void* thread_function(void* parameters) {
 
 void cleanup() {
     close(server_socket_fd);
-   #ifndef USE_AESD_CHAR_DEVICE 
+   #ifndef USE_AESD_CHAR_DEVICE
     unlink(AESD_DATA_FILEPATH);
 #endif
     #ifndef USE_AESD_CHAR_DEVICE
