@@ -34,8 +34,9 @@ struct aesd_dev
 	size_t capacity;
 	size_t offset;
 	char *temp_buf;
-	 struct mutex aesd_mutex;
+	 struct mutex mutx_lock;
 	 size_t temp_buf_size;
+	 struct mutex aesd_mutex;
 	struct cdev cdev;
 };
 

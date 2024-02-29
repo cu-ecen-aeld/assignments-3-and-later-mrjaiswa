@@ -192,6 +192,7 @@ void* thread_function(void* parameters) {
 
     free(received_packets);
     close(aesd_data_fd);
+    //unlink(AESD_DATA_FILEPATH);
     close(thread_data->client_fd);
     thread_data->thread_status = true;
     syslog(LOG_DEBUG, "Closed with %s\n", client_ip);
@@ -200,6 +201,7 @@ void* thread_function(void* parameters) {
 
 void cleanup() {
     close(server_socket_fd);
+    unlink(AESD_DATA_FILEPATH);
     #ifndef USE_AESD_CHAR_DEVICE
     pthread_mutex_destroy(&mutex);
     #endif
