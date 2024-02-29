@@ -1,23 +1,27 @@
-TARGET := aesdsocket
+INCLUDE_DIRS =
+LIB_DIRS =
+CC? = gcc
 
-CFLAGS ?= -g -Wall -Werror -pthread
-# Must be after source files on Ubuntu 20.04 and older (i.e. use LDLIBS not LDFLAGS)
-LDLIBS ?= -lrt
+CDEFS =
+CFLAGS? = -O0 -Wall -Werror -g $(INCLUDE_DIRS) $(CDEFS)
+LDFLAGS? = -lpthread
+LIBS =
 
-USE_AESD_CHAR_DEVICE ?= 1
+HFILES =
+CFILES = aesdsocket.c
 
-ifeq ($(USE_AESD_CHAR_DEVICE),1)
-  DEFINES += -DUSE_AESD_CHAR_DEVICE
-endif
+SRCS = ${HFILES} ${CFILES}
+OBJS = ${CFILES:.c=.o}
 
-override CFLAGS := $(CFLAGS) $(DEFINES)
+all: aesdsocket
+default: aesdsocket
 
-.PHONY: all
-all: $(TARGET)
-
-# Use default rule %: %.c (see make -p)
-$(TARGET): $(TARGET).c
-
-.PHONY: clean
 clean:
-	-${RM} $(TARGET)
+	-rm -f *.o *.d
+	-rm -f aesdsocket
+
+aesdsocket: aesdsocket.o
+	$(CROSS_COMPILE)$(CC) $(LDFLAGS) $(CFLAGS) -o $@ $@.o $(LDFLAGS)
+
+.c.o:
+	$(CROSS_COMPILE)$(CC) $(CFLAGS) -c $<
