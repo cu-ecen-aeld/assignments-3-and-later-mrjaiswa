@@ -201,7 +201,9 @@ void* thread_function(void* parameters) {
 
 void cleanup() {
     close(server_socket_fd);
+   #ifndef USE_AESD_CHAR_DEVICE 
     unlink(AESD_DATA_FILEPATH);
+#endif
     #ifndef USE_AESD_CHAR_DEVICE
     pthread_mutex_destroy(&mutex);
     #endif
